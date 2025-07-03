@@ -4,6 +4,31 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // Function to add event listeners to delete icons
+  function attachDeleteListeners() {
+    document.querySelectorAll(".delete-participant").forEach(icon => {
+      icon.addEventListener("click", async function (e) {
+        const li = this.closest("li");
+        const activityName = li.getAttribute("data-activity");
+        const email = li.getAttribute("data-email");
+        if (confirm(`Remove ${email} from ${activityName}?`)) {
+          try {
+            const response = await fetch(`/activities/${encodeURIComponent(activityName)}/unregister?email=${encodeURIComponent(email)}`, {
+              method: "POST"
+            });
+            if (response.ok) {
+              fetchActivities();
+            } else {
+              alert("Failed to remove participant.");
+            }
+          } catch (err) {
+            alert("Error removing participant.");
+          }
+        }
+      });
+    });
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -12,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = ""; // Clear dropdown before repopulating
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -20,11 +46,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Build participants list HTML
+        let participantsHTML = "";
+        if (details.participants.length > 0) {
+          participantsHTML = `
+            <div class="participants-section">
+              <strong>Participants:</strong>
+              <ul class="participants-list">
+                ${details.participants
+                  .map(
+                    email => `<li data-activity="${name}" data-email="${email}">
+                      <span class="participant-email">${email}</span>
+                      <span class="delete-participant" title="Remove participant">🗑️</span>
+                    </li>`
+                  )
+                  .join("")}
+              </ul>
+            </div>
+          `;
+        } else {
+          participantsHTML = `
+            <div class="participants-section">
+              <strong>Participants:</strong>
+              <span class="no-participants">No participants yet</span>
+            </div>
+          `;
+        }
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHTML}
         `;
 
         activitiesList.appendChild(activityCard);
@@ -35,6 +89,8 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+      // Attach delete listeners after DOM update
+      attachDeleteListeners();
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
@@ -59,11 +115,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
+        messageDiv.textContent = result.message || "Signed up successfully!";
         messageDiv.className = "success";
-        signupForm.reset();
+        fetchActivities(); // Refresh activities list immediately after signup
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
+        messageDiv.textContent = result.detail || "Failed to sign up.";
         messageDiv.className = "error";
       }
 
